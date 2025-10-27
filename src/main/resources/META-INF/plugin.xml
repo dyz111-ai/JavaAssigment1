@@ -11,5 +11,20 @@
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.dyz111ai.javaassigment1.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.dyz111ai.javaassigment1.startup.MyProjectActivity" />
+
+        <toolWindow factoryClass="com.github.dyz111ai.javaassigment1.chat.ChatToolWindow"
+                    id="AI Teaching Assistant"
+                    secondary="false"
+                    icon="AllIcons.Actions.Copy"
+                    anchor="right"/>
     </extensions>
+    <actions>
+        <action id="CodeContext.Action"
+                class="com.github.dyz111ai.javaassigment1.actions.CodeContextAction"
+                text="Ask AI about Selected Code"
+                description="Ask question about selected code in chat window">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift A"/>
+        </action>
+    </actions>
 </idea-plugin>
