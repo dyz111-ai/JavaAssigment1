@@ -9,6 +9,9 @@ import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Dimension
 import javax.swing.*
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.components.JBLabel
 
 class ChatToolWindow : ToolWindowFactory {
 
@@ -36,8 +39,26 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     private val scrollPane = JScrollPane(chatArea).apply {
         preferredSize = Dimension(400, 300)
     }
-
+    // 添加当前文件状态标签
+    private val currentFileLabel = JBLabel("current file: none").apply {
+        foreground = JBColor.GRAY
+        border = JBUI.Borders.empty(2, 10)
+        toolTipText = "The code file currently being edited"
+    }
     init {
+        // 顶部面板 - 当前文件状态
+        val statusPanel = JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.empty(2)
+            background = JBColor.PanelBackground
+            val refreshButton = JButton("🔄").apply {
+                addActionListener { updateCurrentFileStatus() }
+                toolTipText = "refresh"
+                border = JBUI.Borders.empty(2)
+            }
+
+            add(refreshButton, BorderLayout.WEST)
+            add(currentFileLabel, BorderLayout.EAST)
+        }
         // 顶部面板 - 文件上传
         val uploadPanel = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(5)
@@ -54,10 +75,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             add(sendButton, BorderLayout.EAST)
         }
 
+        val bottomPanel = JPanel(BorderLayout()).apply {
+            add(uploadPanel, BorderLayout.NORTH)   // 上传面板在上方
+            add(statusPanel, BorderLayout.CENTER)       // 状态文件在中间
+            add(inputPanel, BorderLayout.SOUTH)    // 输入面板在下方
+        }
         // 添加到主面板
-        add(uploadPanel, BorderLayout.NORTH)
-        add(scrollPane, BorderLayout.CENTER)
-        add(inputPanel, BorderLayout.SOUTH)
+
+        add(scrollPane, BorderLayout.CENTER)        // 聊天区域在中间
+        add(bottomPanel, BorderLayout.SOUTH)        // 底部容器在下方（包含上传和输入）
 
         // 设置输入框回车键监听
         inputField.addActionListener { sendMessage() }
@@ -70,7 +96,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         if (question.isNotEmpty()) {
             appendMessage("You", question)
             inputField.text = ""
-
+            // 发送前更新文件状态
+            updateCurrentFileStatus()
             // 在后台处理问题
             Thread {
                 try {
@@ -151,4 +178,29 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     // 添加项目访问器
     fun getProject(): Project = project
+
+    /**
+     * 更新当前文件状态显示
+     */
+    private fun updateCurrentFileStatus() {
+        val currentFile = getCurrentFile()
+        if (currentFile != null) {
+            currentFileLabel.text = "current file: $currentFile"
+            currentFileLabel.foreground = JBColor.BLUE
+
+        } else {
+            currentFileLabel.text = "current file:none"
+            currentFileLabel.foreground = JBColor.GRAY
+
+        }
+    }
+
+    /**
+     * 获取当前编辑的文件名
+     */
+    private fun getCurrentFile(): String? {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        val selectedFiles = fileEditorManager.selectedFiles
+        return selectedFiles.firstOrNull()?.name
+    }
 }
