@@ -5,6 +5,7 @@
     <vendor>dyz111-ai</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
@@ -25,6 +26,13 @@
                 description="Ask question about selected code in chat window">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift A"/>
+        </action>
+        <action id="GenerateComment.Action"
+                class="com.github.dyz111ai.javaassigment1.actions.GenerateCommentAction"
+                text="注释生成"
+                description="为选中代码生成注释">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt C"/>
         </action>
     </actions>
 </idea-plugin>

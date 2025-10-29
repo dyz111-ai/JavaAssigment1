@@ -12,6 +12,13 @@ import javax.swing.*
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.components.JBLabel
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.psi.PsiManager
+import com.intellij.codeInsight.actions.ReformatCodeProcessor
+import com.intellij.codeInsight.actions.OptimizeImportsProcessor
+import com.intellij.openapi.ui.Messages
 
 class ChatToolWindow : ToolWindowFactory {
 
@@ -59,13 +66,23 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             add(refreshButton, BorderLayout.WEST)
             add(currentFileLabel, BorderLayout.EAST)
         }
-        // 顶部面板 - 文件上传
+        // 顶部面板 - 文件上传 与 一键优化
         val uploadPanel = JPanel(BorderLayout()).apply {
             border = JBUI.Borders.empty(5)
-            add(JLabel("Course Materials:"), BorderLayout.WEST)
-            add(JButton("Upload Documents").apply {
-                addActionListener { uploadDocuments() }
-            }, BorderLayout.CENTER)
+            val leftPanel = JPanel().apply {
+                add(JLabel("Course Materials:"))
+                add(JButton("Upload Documents").apply {
+                    addActionListener { uploadDocuments() }
+                })
+            }
+            val rightPanel = JPanel().apply {
+                add(JButton("规范格式").apply {
+                    toolTipText = "格式化当前文件并优化导入"
+                    addActionListener { optimizeCurrentFile() }
+                })
+            }
+            add(leftPanel, BorderLayout.WEST)
+            add(rightPanel, BorderLayout.EAST)
         }
 
         // 输入面板
@@ -202,5 +219,36 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
         val fileEditorManager = FileEditorManager.getInstance(project)
         val selectedFiles = fileEditorManager.selectedFiles
         return selectedFiles.firstOrNull()?.name
+    }
+
+    /**
+     * 对当前编辑文件执行：格式化 + 优化导入
+     */
+    private fun optimizeCurrentFile() {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        val virtualFile = fileEditorManager.selectedFiles.firstOrNull()
+
+        if (virtualFile == null) {
+            Messages.showInfoMessage(project, "未检测到当前打开的文件", "一键优化代码")
+            return
+        }
+
+        val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+        if (psiFile == null) {
+            Messages.showErrorDialog(project, "无法获取 PSI 文件：${virtualFile.name}", "一键优化代码")
+            return
+        }
+
+        try {
+            WriteCommandAction.runWriteCommandAction(project) {
+                // 先格式化代码
+                ReformatCodeProcessor(project, psiFile, null, false).run()
+                // 再优化导入
+                OptimizeImportsProcessor(project, psiFile).run()
+            }
+            Messages.showInfoMessage(project, "已优化：${virtualFile.name}", "一键优化代码")
+        } catch (e: Exception) {
+            Messages.showErrorDialog(project, "优化失败：${e.message}", "一键优化代码")
+        }
     }
 }
