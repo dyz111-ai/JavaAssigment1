@@ -107,9 +107,9 @@ class LLMService {
      */
     fun generateResponse(context: String, question: String): String {
         val prompt = """
-            课程材料：$context
+            材料：$context
             问题：$question
-            基于课程材料回答问题。
+            基于材料回答问题。
         """.trimIndent()
 
         val messages = listOf(

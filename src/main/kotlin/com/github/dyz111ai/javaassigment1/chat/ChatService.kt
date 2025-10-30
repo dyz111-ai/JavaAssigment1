@@ -44,13 +44,13 @@ class ChatService {
         val fullContext = buildFullContext(highSimilarityChunks, codeContext)
 
         val enhancedPrompt = """
-        ${if (highSimilarityChunks.isEmpty()) "注意：没有找到相关的课程材料，请基于通用知识回答。" else "以下是相关课程材料："}
+        ${if (highSimilarityChunks.isEmpty()) "注意：没有找到相关的材料，请基于通用知识回答。" else "以下是相关材料："}
         
         $fullContext
         
         问题：$question
         
-        请回答用户的问题。如果使用了课程材料请注明来源，如果是基于通用知识请说明。
+        请回答用户的问题。如果使用了材料请注明来源，如果是基于通用知识请说明。
     """.trimIndent()
 
         val answer = llmService.generateResponse(enhancedPrompt, question)
