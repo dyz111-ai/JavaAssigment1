@@ -5,12 +5,14 @@
     <vendor>dyz111-ai</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>Git4Idea</depends>
     <depends>com.intellij.java</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-
+        <toolWindow factoryClass="com.github.dyz111ai.javaassigment1.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
+        <postStartupActivity implementation="com.github.dyz111ai.javaassigment1.startup.MyProjectActivity" />
 
         <toolWindow factoryClass="com.github.dyz111ai.javaassigment1.chat.ChatToolWindow"
                     id="AI Teaching Assistant"
@@ -32,6 +34,14 @@
                 description="为选中代码生成注释">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt C"/>
+        </action>
+        <action id="AI.GenerateCommitMessage"
+                class="com.github.dyz111ai.javaassigment1.actions.GenerateCommitMessageAction"
+                text="生成提交信息（AI）"
+                description="分析已暂存变更，生成符合 Conventional Commits 的中文提交信息">
+            <add-to-group group-id="Vcs.MainMenu" anchor="last"/>
+            <!-- 在提交工具窗口的工具栏中也提供此动作，便于直接填充提交信息 -->
+            <add-to-group group-id="ChangesView.CommitToolbar" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>
