@@ -28,6 +28,12 @@
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift A"/>
         </action>
+        <action id="FormatCode.Action"
+                class="com.github.dyz111ai.javaassigment1.actions.FormatCodeAction"
+                text="规范代码"
+                description="仅格式化选中的代码块">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
         <action id="GenerateComment.Action"
                 class="com.github.dyz111ai.javaassigment1.actions.GenerateCommentAction"
                 text="注释生成"
