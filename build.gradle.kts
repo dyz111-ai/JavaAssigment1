@@ -34,7 +34,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
     // 在这里添加新的依赖 ↓↓↓
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.2.1")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.16.1")
     implementation("org.apache.tika:tika-core:2.9.1")
