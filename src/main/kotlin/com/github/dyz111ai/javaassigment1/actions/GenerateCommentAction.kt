@@ -185,20 +185,22 @@ ${"""$selectedText"""}
 
     private fun applyMethodAndLocalsAnnotations(project: Project, methods: List<PsiMethod>) {
         if (methods.isEmpty()) return
-        val factory = JavaPsiFacade.getInstance(project).elementFactory
+        
+        // 使用 AI 为每个方法生成详细的 Javadoc 注释
+        for (method in methods) {
+            if (!isElementModifiable(method)) continue
+            generateMethodJavadocWithAI(project, method)
+        }
+        
+        // 局部变量和关键语句注释（保持原有逻辑）
         WriteCommandAction.runWriteCommandAction(project) {
             for (m in methods) {
                 if (!isElementModifiable(m)) continue
-                // 方法Javadoc
-                val newDoc = factory.createDocCommentFromText(buildMethodJavadoc(m))
-                val existing = m.docComment
-                if (existing != null) existing.replace(newDoc) else m.addBefore(newDoc, m.firstChild)
-
-                // 局部变量：定义处的单句意义注释
                 annotateLocalVariables(project, m)
             }
             PsiDocumentManager.getInstance(project).commitAllDocuments()
         }
+        
         // 关键语句注释（需在写入外以便二次写操作）
         for (m in methods) annotateKeyStatements(project, m)
     }
@@ -339,12 +341,57 @@ ${"""$selectedText"""}
             Messages.showInfoMessage(project, "该方法已存在注释。", "注释生成")
             return
         }
-        val factory = JavaPsiFacade.getInstance(project).elementFactory
-        val javadoc = buildMethodJavadoc(method)
-        WriteCommandAction.runWriteCommandAction(project) {
-            val doc = factory.createDocCommentFromText(javadoc)
-            method.addBefore(doc, method.firstChild)
-            PsiDocumentManager.getInstance(project).commitAllDocuments()
+        // 使用 AI 生成详细注释
+        generateMethodJavadocWithAI(project, method)
+    }
+
+    /**
+     * 使用 AI 生成方法的详细 Javadoc 注释
+     */
+    private fun generateMethodJavadocWithAI(project: Project, method: PsiMethod) {
+        // 获取方法签名和完整代码
+        val methodSignature = buildMethodSignature(method)
+        val methodCode = method.text
+        
+        // 使用 AI 生成详细的 Javadoc 注释
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val prompt = """
+请为以下 Java 方法生成完整的中文 Javadoc 注释。要求：
+1. 使用标准的 Javadoc 格式（/** ... */）
+2. 详细说明方法的功能、参数、返回值、可能抛出的异常
+3. 不要使用占位符或"请完善"等提示文本
+4. 所有内容用中文描述，专业且准确
+5. 输出格式：每行以 " * " 开头
+
+方法签名：
+${methodSignature}
+
+完整方法代码：
+${methodCode}
+            """.trimIndent()
+
+            val llm = LLMService()
+            val aiJavadoc = try {
+                llm.generateResponse(prompt, "为方法生成详细Javadoc注释")
+            } catch (_: Exception) {
+                null
+            }
+
+            val finalJavadoc = sanitizeJavadocComment(aiJavadoc) ?: buildMethodJavadoc(method)
+
+            ApplicationManager.getApplication().invokeLater {
+                val factory = JavaPsiFacade.getInstance(project).elementFactory
+                WriteCommandAction.runWriteCommandAction(project) {
+                    val newDoc = factory.createDocCommentFromText(finalJavadoc)
+                    val existing = method.docComment
+                    if (existing != null) {
+                        existing.replace(newDoc)
+                    } else {
+                        method.addBefore(newDoc, method.firstChild)
+                    }
+                    PsiDocumentManager.getInstance(project).commitAllDocuments()
+                }
+            }
         }
     }
 
@@ -526,18 +573,60 @@ ${"""$selectedText"""}
     }
 
     private fun generateOrReplaceMethodJavadoc(project: Project, method: PsiMethod) {
-        val factory = JavaPsiFacade.getInstance(project).elementFactory
-        val javadoc = buildMethodJavadoc(method)
-        WriteCommandAction.runWriteCommandAction(project) {
-            val newDoc = factory.createDocCommentFromText(javadoc)
-            val existing = method.docComment
-            if (existing != null) {
-                existing.replace(newDoc)
-            } else {
-                method.addBefore(newDoc, method.firstChild)
-            }
-            PsiDocumentManager.getInstance(project).commitAllDocuments()
+        // 统一使用 AI 生成方法注释
+        generateMethodJavadocWithAI(project, method)
+    }
+
+    private fun buildMethodSignature(method: PsiMethod): String {
+        val sb = StringBuilder()
+        val modifiers = method.modifierList.text
+        val returnType = method.returnType?.presentableText ?: "void"
+        val name = method.name
+        
+        sb.append("$modifiers $returnType $name(")
+        val params = method.parameterList.parameters
+        for (i in params.indices) {
+            if (i > 0) sb.append(", ")
+            sb.append("${params[i].type.presentableText} ${params[i].name}")
         }
+        sb.append(")")
+        return sb.toString()
+    }
+
+    private fun sanitizeJavadocComment(aiText: String?): String? {
+        if (aiText.isNullOrBlank()) return null
+        var t = aiText.trim()
+        
+        // 移除可能的 Markdown 代码块包裹
+        if (t.startsWith("```")) {
+            t = t.removePrefix("```java").removePrefix("```").removeSuffix("```").trim()
+        }
+        
+        // 确保以 /** 开始
+        if (!t.startsWith("/**")) {
+            t = "/**\n * $t"
+        }
+        
+        // 确保以 */ 结束
+        if (!t.endsWith("*/")) {
+            t = "$t\n */"
+        }
+        
+        // 确保每行以 " * " 开头（除了第一行的 /** 和最后一行的 */）
+        val lines = t.lines().toMutableList()
+        val sanitized = mutableListOf<String>()
+        for (i in lines.indices) {
+            val line = lines[i].trim()
+            when {
+                i == 0 && line == "/**" -> sanitized.add("/**")
+                i == lines.size - 1 && line == "*/" -> sanitized.add(" */")
+                line.isEmpty() -> sanitized.add(" *")
+                line.startsWith(" * ") -> sanitized.add(line)
+                else -> sanitized.add(" * $line")
+            }
+        }
+        
+        return sanitized.joinToString("\n")
     }
 
     private fun buildMethodJavadoc(method: PsiMethod): String {
