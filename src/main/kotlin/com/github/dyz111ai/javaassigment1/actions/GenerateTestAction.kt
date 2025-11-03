@@ -11,18 +11,16 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
-import java.awt.BorderLayout
-import java.awt.Dimension
+import java.awt.*
 import javax.swing.*
+import javax.swing.border.EmptyBorder
 import kotlin.concurrent.thread
 
 class GenerateTestAction : AnAction("Generate Test Code") {
-
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val editor = event.getData(CommonDataKeys.EDITOR) ?: return
         val psiFile = event.getData(CommonDataKeys.PSI_FILE) ?: return
-
         val caretOffset = editor.caretModel.offset
         val element = psiFile.findElementAt(caretOffset) ?: return
         val psiClass = PsiTreeUtil.getParentOfType(element, PsiClass::class.java)
@@ -32,8 +30,7 @@ class GenerateTestAction : AnAction("Generate Test Code") {
             return
         }
 
-        // 打开自定义对话框
-        GenerateTestDialog(project, psiClass).show()
+        GenerateTestChatDialog(project, psiClass).show()
     }
 
     override fun update(event: AnActionEvent) {
@@ -43,86 +40,133 @@ class GenerateTestAction : AnAction("Generate Test Code") {
 }
 
 /**
- * 自定义对话框：输入需求、显示生成进度与结果
+ * 类似 ChatGPT 风格的交互窗口
  */
-class GenerateTestDialog(private val project: Project, private val psiClass: PsiClass) :
+class GenerateTestChatDialog(private val project: Project, private val psiClass: PsiClass) :
     DialogWrapper(project, true) {
 
+    private val chatPanel = JPanel()
     private val inputField = JTextField()
-    private val outputArea = JTextArea()
-    private val generateButton = JButton("Generate test code")
+    private val sendButton = JButton("Send")
 
     init {
-        title = "Generate test code for ${psiClass.name}"
+        title = "Chat with LLM - Generate Test for ${psiClass.name}"
         init()
+        // 禁止按回车关闭对话框
+        setOKActionEnabled(false)
     }
 
     override fun createCenterPanel(): JComponent {
-        val panel = JPanel(BorderLayout(10, 10))
+        val root = JPanel(BorderLayout(10, 10))
+        root.border = EmptyBorder(10, 10, 10, 10)
 
-        // 输入区
+        // 聊天内容面板
+        chatPanel.layout = BoxLayout(chatPanel, BoxLayout.Y_AXIS)
+        chatPanel.background = Color(30, 30, 30)
+
+        val scrollPane = JScrollPane(chatPanel)
+        scrollPane.preferredSize = Dimension(700, 500)
+        scrollPane.verticalScrollBar.unitIncrement = 16
+        scrollPane.background = Color(30, 30, 30)
+        scrollPane.border = BorderFactory.createLineBorder(Color(60, 60, 60))
+
+        // 底部输入区
         val inputPanel = JPanel(BorderLayout(5, 5))
-        inputPanel.add(JLabel("Please input your test requirement："), BorderLayout.NORTH)
+        inputField.background = Color(40, 40, 40)
+        inputField.foreground = Color.WHITE
+        inputField.caretColor = Color.WHITE
+        inputField.border = BorderFactory.createEmptyBorder(5, 8, 5, 8)
+
+        // 绑定 Enter 键为发送
+        inputField.addActionListener {
+            onSendClicked()
+        }
+
+        sendButton.background = Color(70, 130, 180)
+        sendButton.foreground = Color.WHITE
+        sendButton.isFocusPainted = false
+        sendButton.addActionListener { onSendClicked() }
+
         inputPanel.add(inputField, BorderLayout.CENTER)
+        inputPanel.add(sendButton, BorderLayout.EAST)
 
-        // 输出区
-        outputArea.isEditable = false
-        outputArea.lineWrap = true
-        outputArea.wrapStyleWord = true
-        val scrollPane = JScrollPane(outputArea)
-        scrollPane.preferredSize = Dimension(700, 400)
+        root.add(scrollPane, BorderLayout.CENTER)
+        root.add(inputPanel, BorderLayout.SOUTH)
 
-        // 按钮事件
-        generateButton.addActionListener {
-            val userRequirement = inputField.text.trim()
-            if (userRequirement.isEmpty()) {
-                Messages.showWarningDialog(project, "Please input your test requirement", "Prompt")
-                return@addActionListener
+        return root
+    }
+
+    override fun createActions(): Array<Action> {
+        // 自定义按钮，仅保留“Exit”按钮
+        val exitAction = object : DialogWrapperAction("Exit") {
+            override fun doAction(e: java.awt.event.ActionEvent?) {
+                close(OK_EXIT_CODE)
             }
+        }
+        return arrayOf(exitAction)
+    }
 
-            generateButton.isEnabled = false
-            outputArea.text = "Generating test code..."
+    private fun onSendClicked() {
+        val userInput = inputField.text.trim()
+        if (userInput.isEmpty()) return
 
-            // 异步调用 LLM
-            thread {
-                try {
-                    val llmService = LLMService()
-                    val classSource = psiClass.text
-                    val className = psiClass.name ?: "UnnamedClass"
+        addMessageBubble("👤 你：$userInput", isUser = true)
+        inputField.text = ""
+        sendButton.isEnabled = false
 
-                    val prompt = """
-                        请根据以下 Java 类代码生成符合 JUnit5 规范的测试代码。
-                        测试类命名为 ${className}Test。
-                        测试需求：$userRequirement
+        val classSource = psiClass.text
+        val className = psiClass.name ?: "UnnamedClass"
 
-                        类代码：
-                        $classSource
-                    """.trimIndent()
+        addMessageBubble("🤖 LLM：正在生成测试代码，请稍候...", isUser = false)
 
-                    val response = llmService.generateResponse(classSource, prompt)
+        thread {
+            try {
+                val llmService = LLMService()
+                val prompt = """
+                    请根据以下 Java 类代码生成符合 JUnit5 规范的测试代码。
+                    测试类命名为 ${className}Test。
+                    测试需求：$userInput
 
-                    SwingUtilities.invokeLater {
-                        outputArea.text = response
-                        generateButton.isEnabled = true
-                    }
-                } catch (e: Exception) {
-                    SwingUtilities.invokeLater {
-                        outputArea.text = "Failed to generate test code. Error message：${e.message}"
-                        generateButton.isEnabled = true
-                    }
+                    类代码：
+                    $classSource
+                """.trimIndent()
+
+                val response = llmService.generateResponse(classSource, prompt)
+
+                SwingUtilities.invokeLater {
+                    addMessageBubble("🤖 LLM：\n$response", isUser = false)
+                    sendButton.isEnabled = true
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater {
+                    addMessageBubble("❌ 生成失败：${e.message}", isUser = false)
+                    sendButton.isEnabled = true
                 }
             }
         }
+    }
 
-        // 底部按钮区
-        val buttonPanel = JPanel(BorderLayout())
-        buttonPanel.add(generateButton, BorderLayout.EAST)
+    /**
+     * 添加一条对话气泡（全宽）
+     */
+    private fun addMessageBubble(text: String, isUser: Boolean) {
+        val bubble = JTextArea(text)
+        bubble.lineWrap = true
+        bubble.wrapStyleWord = true
+        bubble.isEditable = false
+        bubble.margin = Insets(8, 10, 8, 10)
+        bubble.background = if (isUser) Color(60, 60, 60) else Color(45, 45, 45)
+        bubble.foreground = if (isUser) Color(255, 255, 255) else Color(173, 216, 230)
+        bubble.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
 
-        // 布局组合
-        panel.add(inputPanel, BorderLayout.NORTH)
-        panel.add(scrollPane, BorderLayout.CENTER)
-        panel.add(buttonPanel, BorderLayout.SOUTH)
+        val wrapper = JPanel(BorderLayout())
+        wrapper.background = Color(30, 30, 30)
+        wrapper.border = EmptyBorder(4, 4, 4, 4)
+        wrapper.add(bubble, BorderLayout.CENTER)
 
-        return panel
+        chatPanel.add(wrapper)
+        chatPanel.add(Box.createVerticalStrut(5))
+        chatPanel.revalidate()
+        chatPanel.repaint()
     }
 }
