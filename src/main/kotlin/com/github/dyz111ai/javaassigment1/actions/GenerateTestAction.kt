@@ -73,19 +73,54 @@ class GenerateTestChatDialog(private val project: Project, private val psiClass:
         // 底部输入区
         val inputPanel = JPanel(BorderLayout(5, 5))
         inputField.background = Color(40, 40, 40)
-        inputField.foreground = Color.WHITE
         inputField.caretColor = Color.WHITE
         inputField.border = BorderFactory.createEmptyBorder(5, 8, 5, 8)
 
+        // 👉 添加提示词 Placeholder
+        val placeholder = "Please input test requirements"
+        inputField.text = placeholder
+        inputField.foreground = Color.GRAY
+
+        // 当用户点击或键入时清除占位文本
+        inputField.addMouseListener(object : java.awt.event.MouseAdapter() {
+            override fun mousePressed(e: java.awt.event.MouseEvent?) {
+                if (inputField.text == placeholder) {
+                    inputField.text = ""
+                    inputField.foreground = Color.WHITE
+                }
+            }
+        })
+        inputField.addKeyListener(object : java.awt.event.KeyAdapter() {
+            override fun keyTyped(e: java.awt.event.KeyEvent?) {
+                if (inputField.text == placeholder) {
+                    inputField.text = ""
+                    inputField.foreground = Color.WHITE
+                }
+            }
+        })
+        // 失去焦点且为空时恢复占位
+        inputField.addFocusListener(object : java.awt.event.FocusAdapter() {
+            override fun focusLost(e: java.awt.event.FocusEvent?) {
+                if (inputField.text.isEmpty()) {
+                    inputField.text = placeholder
+                    inputField.foreground = Color.GRAY
+                }
+            }
+        })
+
         // 绑定 Enter 键为发送
         inputField.addActionListener {
+            if (inputField.text.trim().isEmpty() || inputField.text == placeholder) return@addActionListener
             onSendClicked()
         }
 
         sendButton.background = Color(70, 130, 180)
         sendButton.foreground = Color.WHITE
         sendButton.isFocusPainted = false
-        sendButton.addActionListener { onSendClicked() }
+        sendButton.addActionListener {
+            if (inputField.text.trim().isEmpty() || inputField.text == placeholder) return@addActionListener
+            onSendClicked()
+        }
 
         inputPanel.add(inputField, BorderLayout.CENTER)
         inputPanel.add(sendButton, BorderLayout.EAST)
@@ -112,6 +147,8 @@ class GenerateTestChatDialog(private val project: Project, private val psiClass:
 
         addMessageBubble("👤 你：$userInput", isUser = true)
         inputField.text = ""
+        inputField.foreground = Color.GRAY
+        inputField.text = "Please input test requirements"
         sendButton.isEnabled = false
 
         val classSource = psiClass.text
