@@ -105,14 +105,20 @@ class LLMService {
      * @param question 用户提出的问题
      * @return LLM生成的回答字符串，如果调用失败则返回错误信息
      */
-    fun generateResponse(context: String, question: String): String {
-        val prompt = """
-            材料：$context
-            问题：$question
-            基于材料回答问题。
-        """.trimIndent()
+    fun generateResponse(context:String,question: String): String {
+        // Add system message to enforce English responses
+        val systemMessage = ChatMessage("system", "You are a helpful assistant. Always respond in English, regardless of the language used in the materials or questions provided.")
+        
 
+        val prompt = """
+        Context: $context
+        
+        Question: $question
+        
+        Based on the context above, please answer the question in English.
+    """.trimIndent()
         val messages = listOf(
+            systemMessage,
             ChatMessage("user", prompt)
         )
 
@@ -125,9 +131,9 @@ class LLMService {
 
         return try {
             val response = makeApiCall(request)
-            response.choices.firstOrNull()?.message?.content ?: "API返回空响应"
+            response.choices.firstOrNull()?.message?.content ?: "API returned empty response"
         } catch (e: Exception) {
-            "API调用失败: ${e.message}"
+            "API call failed: ${e.message}"
         }
     }
 
@@ -167,9 +173,9 @@ class LLMService {
                 max_tokens = 10
             )
             val response = makeApiCall(testRequest)
-            "连接成功"
+            "Connection successful"
         } catch (e: Exception) {
-            "连接失败: ${e.message}"
+            "Connection failed: ${e.message}"
         }
     }
 }

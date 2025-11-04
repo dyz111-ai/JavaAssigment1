@@ -12,7 +12,7 @@ import java.util.*
 import javax.swing.*
 import java.io.File
 import com.intellij.openapi.project.Project
-
+import com.intellij.openapi.ui.Messages
 /**
  * 聊天主面板类，负责整个聊天界面的布局和核心功能协调
  * 集成了会话管理、文件上传、消息显示等功能组件
@@ -22,6 +22,8 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
     // 服务层组件：处理AI聊天和聊天历史数据
     private val chatService = ChatService()                    // AI聊天服务，处理与AI的交互
     private val chatHistoryManager = ChatHistoryManager(project) // 聊天历史管理器，负责会话和消息的持久化
+    // 测试对话框
+
 
     // 拆分的功能组件：遵循单一职责原则，提高代码可维护性
     private val sessionManager = SessionManager(this, chatHistoryManager)        // 会话管理组件
@@ -53,6 +55,7 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
      * 初始化方法：设置界面、事件监听器，并加载初始数据
      */
     init {
+
         setupUI()                           // 初始化用户界面布局
         setupEventListeners()               // 设置事件监听器
         sessionManager.loadSessionList()    // 加载会话列表
@@ -142,9 +145,6 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             val userMessage = ChatMessage("You", question)  // 创建用户消息对象
             val sessionId = currentSession.id               // 获取会话ID
 
-            // 先处理待处理文件（如果有的话）
-            val hasProcessedFiles = fileUploadManager.processPendingFiles()
-
             // 添加到历史记录并显示在界面上
             chatHistoryManager.addMessage(sessionId, userMessage)
             appendMessageToUI(userMessage)
@@ -156,7 +156,24 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
             // 在后台线程中处理AI问答，避免阻塞UI
             Thread {
                 try {
-                    val answer = chatService.askQuestion(question, project)  // 调用AI服务
+                    // 先处理待处理文件（如果有的话），并等待处理完成
+                    // 这样可以确保检索时文件已经处理完成，避免竞态条件
+                    val fileProcessingLatch = fileUploadManager.processPendingFiles()
+                    if (fileProcessingLatch != null) {
+                        // 等待文件处理完成（最多等待60秒，避免无限等待）
+                        val completed = fileProcessingLatch.await(60, java.util.concurrent.TimeUnit.SECONDS)
+                        if (!completed) {
+                            // 如果超时，提示用户文件仍在处理中，但继续回答（可能无法检索到新文件）
+                            SwingUtilities.invokeLater {
+                                val timeoutMessage = ChatMessage("System",
+                                    "⚠️ File processing is taking longer than expected. Answering based on previously processed files.")
+                                chatHistoryManager.addMessage(sessionId, timeoutMessage)
+                                appendMessageToUI(timeoutMessage)
+                            }
+                        }
+                    }
+
+                    val answer = chatService.askQuestion(sessionId, question, project)  // 调用AI服务，传入会话ID以实现会话隔离
                     SwingUtilities.invokeLater {
                         val aiMessage = ChatMessage("AI", answer)  // 创建AI回复消息
                         chatHistoryManager.addMessage(sessionId, aiMessage)  // 保存到历史
@@ -258,6 +275,15 @@ class ChatPanel(private val project: Project) : JPanel(BorderLayout()) {
      * 获取聊天历史管理器
      */
     fun getChatHistoryManager(): ChatHistoryManager = chatHistoryManager
+
+    /**
+     * 清理指定会话的向量存储
+     * 在删除会话时调用，用于清理该会话的文档向量存储
+     * @param sessionId 要清理的会话ID
+     */
+    fun clearSessionVectorStore(sessionId: String) {
+        chatService.removeSessionVectorStore(sessionId)
+    }
 
     /**
      * 设置输入框文本（供外部调用）

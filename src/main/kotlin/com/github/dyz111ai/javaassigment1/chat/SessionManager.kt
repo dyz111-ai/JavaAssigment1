@@ -78,6 +78,9 @@ class SessionManager(
         // 设置会话列表属性
         sessionList.selectionMode = ListSelectionModel.SINGLE_SELECTION  // 设置为单选模式
         sessionList.addListSelectionListener(SessionSelectionListener()) // 添加选择监听器
+
+        // 添加双击重命名功能
+        setupDoubleClickRename()
     }
 
     /**
@@ -186,6 +189,8 @@ class SessionManager(
 
                 // 如果用户确认删除
                 if (confirm == JOptionPane.YES_OPTION) {
+                    // 先清理该会话的向量存储
+                    parent.clearSessionVectorStore(sessionId)
                     // 执行删除操作
                     if (chatHistoryManager.deleteSession(sessionId)) {
                         loadSessionList()                     // 重新加载会话列表
@@ -218,6 +223,56 @@ class SessionManager(
                     if (chatHistoryManager.setCurrentSession(session.id)) {
                         parent.displayCurrentSessionMessages()  // 显示该会话的消息
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * 设置双击重命名功能
+     */
+    private fun setupDoubleClickRename() {
+        // 添加鼠标监听器处理双击事件
+        sessionList.addMouseListener(object : java.awt.event.MouseAdapter() {
+            override fun mouseClicked(e: java.awt.event.MouseEvent) {
+                if (e.clickCount == 2) { // 双击
+                    val index = sessionList.locationToIndex(e.point)
+                    if (index >= 0) {
+                        renameSessionAt(index)
+                    }
+                }
+            }
+        })
+    }
+
+    /**
+     * 重命名指定位置的会话
+     * @param index 会话在列表中的索引位置
+     */
+    private fun renameSessionAt(index: Int) {
+        val sessions = chatHistoryManager.getAllSessions()
+        if (index < sessions.size) {
+            val session = sessions[index]
+
+            // 弹出输入对话框获取新标题
+            val newTitle = JOptionPane.showInputDialog(
+                parent,
+                "Enter new chat title:",
+                "Rename Chat",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                null,
+                session.title
+            )as? String  // 关键：转换为String
+
+            // 如果用户输入了新标题（没有取消）
+            if (newTitle != null &&newTitle != session.title) {
+                // 执行重命名
+                if (chatHistoryManager.renameSession(session.id, newTitle)) {
+                    loadSessionList() // 重新加载会话列表以显示新标题
+
+                    // 重新选中当前会话（保持选中状态）
+                    sessionList.selectedIndex = index
                 }
             }
         }

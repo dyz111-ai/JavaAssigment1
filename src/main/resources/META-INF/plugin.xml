@@ -11,8 +11,7 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.dyz111ai.javaassigment1.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.dyz111ai.javaassigment1.startup.MyProjectActivity" />
+
 
         <toolWindow factoryClass="com.github.dyz111ai.javaassigment1.chat.ChatToolWindow"
                     id="AI Teaching Assistant"

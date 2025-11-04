@@ -31,6 +31,8 @@ class DocumentProcessor {
             "txt" -> processText(file, fileName)
             else -> processWithTika(file, fileName)
         }
+
+
     }
 
     private fun processPdf(file: File, fileName: String): List<DocumentChunk> {

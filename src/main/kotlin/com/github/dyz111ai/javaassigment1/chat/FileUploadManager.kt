@@ -7,6 +7,7 @@ import java.awt.Dimension
 import java.io.File
 
 import java.util.*
+import java.util.concurrent.CountDownLatch
 import javax.swing.*
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -105,11 +106,11 @@ class FileUploadManager(
     /**
      * 处理所有待处理文件
      * 在用户发送消息时调用，将待处理文件发送到AI服务进行处理
-     * @return Boolean 是否处理了文件（true表示有文件被处理）
+     * @return CountDownLatch? 如果有文件被处理，返回一个latch用于等待处理完成；否则返回null
      */
-    fun processPendingFiles(): Boolean {
+    fun processPendingFiles(): CountDownLatch? {
         // 检查是否有待处理文件
-        if (pendingFiles.isEmpty()) return false
+        if (pendingFiles.isEmpty()) return null
 
         // 复制文件列表并清空原始列表（避免并发修改）
         val filesToProcess = pendingFiles.toList()
@@ -117,11 +118,29 @@ class FileUploadManager(
         pendingFilesPanel.removeAll()           // 清空UI面板
         updatePendingFilesVisibility()          // 更新面板可见性
 
+        // 创建CountDownLatch，用于同步等待文件处理完成
+        val latch = CountDownLatch(1)
+
         // 在后台线程中处理文件，避免阻塞UI
         Thread {
             try {
-                // 调用聊天服务处理文档
-                chatService.processDocuments(filesToProcess)
+                // 获取当前会话ID
+                val currentSession = chatHistoryManager.getCurrentSession()
+                if (currentSession == null) {
+                    SwingUtilities.invokeLater {
+                        val errorMessage = ChatMessage("System",
+                            "❌ No active session. Please create a session first.")
+                        chatHistoryManager.getCurrentSession()?.let { session ->
+                            chatHistoryManager.addMessage(session.id, errorMessage)
+                            appendMessageToUI(errorMessage)
+                        }
+                    }
+                    latch.countDown()  // 即使出错也要释放latch
+                    return@Thread
+                }
+                
+                // 调用聊天服务处理文档，传入会话ID以实现会话隔离
+                chatService.processDocuments(currentSession.id, filesToProcess)
 
                 // 在UI线程中更新界面（Swing线程安全要求）
                 SwingUtilities.invokeLater {
@@ -154,10 +173,13 @@ class FileUploadManager(
                         appendMessageToUI(errorMessage)
                     }
                 }
+            } finally {
+                // 无论成功或失败，都要释放latch，表示处理完成
+                latch.countDown()
             }
         }.start()
 
-        return true  // 表示有文件被处理
+        return latch  // 返回latch，调用者可以等待处理完成
     }
 
     /**
